@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClassMate - AI Meeting Assistant</title>
+    <meta name="description" content="AI-powered meeting transcription and note-taking">
+    <meta name="keywords" content="meeting transcription, AI notes, voice recording">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ClassMate">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Preconnect to API -->
+    <link rel="preconnect" href="https://api.classmate.app">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="ClassMate - AI Meeting Assistant">
+    <meta property="og:description" content="AI-powered meeting transcription and note-taking">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="/og-image.png">
+    <meta property="og:url" content="https://classmate.app">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ClassMate - AI Meeting Assistant">
+    <meta name="twitter:description" content="AI-powered meeting transcription and note-taking">
+    <meta name="twitter:image" content="/twitter-image.png">
+    
+    <!-- Scripts -->
+    <script type="module" src="/src/main.js"></script>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="/src/styles.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#2563eb',
+              secondary: '#1e40af',
+              accent: '#06b6d4',
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-gray-50">
+    <div id="app">
+        <!-- Loading State -->
+        <div id="loading" class="flex items-center justify-center min-h-screen">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                <h2 class="text-xl font-semibold text-gray-700">Loading ClassMate...</h2>
+                <p class="text-gray-500">Setting up your AI meeting assistant</p>
+            </div>
+        </div>
+        
+        <!-- Main App (hidden initially) -->
+        <div id="main-app" class="hidden">
+            <!-- Navigation -->
+            <nav class="bg-white shadow-sm border-b">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between h-16">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <h1 class="text-2xl font-bold text-primary">ClassMate</h1>
+                            </div>
+                            <div class="hidden md:block">
+                                <div class="ml-10 flex items-baseline space-x-4">
+                                    <a href="#" class="text-gray-700 hover:text-primary px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                                    <a href="#" class="text-gray-700 hover:text-primary px-3 py-2 rounded-md text-sm font-medium">Recordings</a>
+                                    <a href="#" class="text-gray-700 hover:text-primary px-3 py-2 rounded-md text-sm font-medium">Notes</a>
+                                    <a href="#" class="text-gray-700 hover:text-primary px-3 py-2 rounded-md text-sm font-medium">Settings</a>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <button id="record-btn" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m0 0a7 7 0 01-7 7m-7 7a7 7 0 0114 0h-14"></path>
+                                    </svg>
+                                    Start Recording
+                                </button>
+                                <div class="ml-3 relative">
+                                    <button class="p-2 text-gray-500 hover:text-gray-700">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 8 0zm-4 0a4 4 0 11-8 0 4 4 0 018 8 0z"></path>
+                                            <circle cx="12" cy="12" r="2"></circle>
+                                        </svg>
+                                    </button>
+                                    <div id="notification-badge" class="absolute top-0 right-0 h-2 w-2 bg-red-500 rounded-full hidden"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                
+                <!-- Main Content -->
+                <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                    <!-- Dashboard -->
+                    <div id="dashboard" class="space-y-6">
+                        <!-- Stats Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="bg-white p-6 rounded-lg shadow">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-blue-100 rounded-lg">
+                                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6H2a1 1 0 00-1-1V5a1 1 0 00-1 1H5a1 1 0 001-1h5a2 2 0 012 2v10a2 2 0 012 2h2a2 2 0 002-2v-5a2 2 0 002-2H5a2 2 0 002-2V5a2 2 0 002 2z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="ml-4">
+                                        <h3 class="text-lg font-semibold text-gray-900">Total Recordings</h3>
+                                        <p class="text-2xl font-bold text-primary" id="total-recordings">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white p-6 rounded-lg shadow">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-green-100 rounded-lg">
+                                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 012 2v6a2 2 0 012-2h6a2 2 0 012-2v-6a2 2 0 012-2z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="ml-4">
+                                        <h3 class="text-lg font-semibold text-gray-900">Notes Generated</h3>
+                                        <p class="text-2xl font-bold text-green-600" id="total-notes">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white p-6 rounded-lg shadow">
+                                <div class="flex items-center">
+                                    <div class="p-3 bg-purple-100 rounded-lg">
+                                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 4h.01M-5.5 0h.01M6 20h.01M9 16h.01"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="ml-4">
+                                        <h3 class="text-lg font-semibold text-gray-900">Transcription Hours</h3>
+                                        <p class="text-2xl font-bold text-purple-600" id="total-hours">0</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Recent Sessions -->
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-xl font-semibold text-gray-900 mb-4">Recent Sessions</h2>
+                            <div id="recent-sessions" class="space-y-4">
+                                <!-- Sessions will be loaded here -->
+                                <div class="text-center text-gray-500 py-8">
+                                    <svg class="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 4h.01M-5.5 0h.01M6 20h.01M9 16h.01"></path>
+                                    </svg>
+                                    <p>No recordings yet</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Recording Interface -->
+                    <div id="recording" class="hidden">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <div class="text-center">
+                                <h2 class="text-2xl font-bold text-gray-900 mb-4">Recording Session</h2>
+                                
+                                <!-- Recording Controls -->
+                                <div class="mb-6">
+                                    <div id="recording-controls" class="flex justify-center items-center space-x-4">
+                                        <button id="pause-btn" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors hidden">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                                                <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                                            </svg>
+                                            Pause
+                                        </button>
+                                        <button id="stop-btn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors hidden">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                                                <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                                            </svg>
+                                            Stop
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Recording Status -->
+                                    <div class="mb-4">
+                                        <div id="recording-status" class="text-lg font-medium text-gray-700">
+                                            Ready to record
+                                        </div>
+                                        <div id="recording-timer" class="text-3xl font-bold text-primary hidden">
+                                            00:00:00
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Audio Waveform -->
+                                    <div id="audio-waveform" class="bg-gray-100 rounded-lg h-32 flex items-center justify-center">
+                                        <canvas id="waveform-canvas" class="w-full h-full"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Notes Interface -->
+                    <div id="notes" class="hidden">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-2xl font-bold text-gray-900 mb-4">AI Notes</h2>
+                            
+                            <!-- Notes List -->
+                            <div id="notes-list" class="space-y-4">
+                                <!-- Notes will be loaded here -->
+                                <div class="text-center text-gray-500 py-8">
+                                    <svg class="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 4h.01M-5.5 0h.01M6 20h.01M9 16h.01"></path>
+                                    </svg>
+                                    <p>No notes available</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Settings Interface -->
+                    <div id="settings" class="hidden">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-2xl font-bold text-gray-900 mb-6">Settings</h2>
+                            
+                            <div class="space-y-6">
+                                <!-- Recording Settings -->
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recording</h3>
+                                    <div class="space-y-4">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Audio Quality</label>
+                                            <select class="border-gray-300 rounded-md px-3 py-2 text-sm">
+                                                <option value="low">Low</option>
+                                                <option value="medium" selected>Medium</option>
+                                                <option value="high">High</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Auto-transcribe</label>
+                                            <input type="checkbox" checked class="h-4 w-4 text-primary rounded border-gray-300">
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Speaker Identification</label>
+                                            <input type="checkbox" checked class="h-4 w-4 text-primary rounded border-gray-300">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- AI Settings -->
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900 mb-4">AI Assistant</h3>
+                                    <div class="space-y-4">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Summary Length</label>
+                                            <select class="border-gray-300 rounded-md px-3 py-2 text-sm">
+                                                <option value="short">Short</option>
+                                                <option value="medium" selected>Medium</option>
+                                                <option value="long">Long</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Key Points</label>
+                                            <input type="checkbox" checked class="h-4 w-4 text-primary rounded border-gray-300">
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Action Items</label>
+                                            <input type="checkbox" checked class="h-4 w-4 text-primary rounded border-gray-300">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Storage Settings -->
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Storage</h3>
+                                    <div class="space-y-4">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Cloud Sync</label>
+                                            <input type="checkbox" checked class="h-4 w-4 text-primary rounded border-gray-300">
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm font-medium text-gray-700">Storage Location</label>
+                                            <select class="border-gray-300 rounded-md px-3 py-2 text-sm">
+                                                <option value="cloud">Cloud</option>
+                                                <option value="local">Local</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
