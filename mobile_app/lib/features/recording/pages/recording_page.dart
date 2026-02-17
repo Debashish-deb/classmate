@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/services/recording_service.dart';
 import '../../../shared/services/session_manager.dart';
 import '../../../shared/services/upload_queue_service.dart';
@@ -78,77 +80,211 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
   Widget build(BuildContext context) {
     final recordingService = ref.read(recordingServiceProvider);
     final sessionManager = ref.read(sessionManagerProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ClassMate'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () => context.go('/sessions'),
-          ),
-        ],
-      ),
-      body: _isInitializing
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 40),
-                  _buildStatusCard(),
-                  const SizedBox(height: 40),
-                  RecordingButton(
-                    isRecording: recordingService.isRecording,
-                    duration: _currentDuration,
-                    enabled: _hasPermissions,
-                    onStart: _startRecording,
-                    onStop: _stopRecording,
-                  ),
-                  const SizedBox(height: 40),
-                  if (recordingService.isRecording) ...[
-                    _buildRecordingControls(),
-                    const SizedBox(height: 20),
-                    _buildWaveformPlaceholder(),
+      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: _isInitializing
+            ? _buildLoadingState(context)
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 40),
+                    _buildHeader(context),
+                    const SizedBox(height: 40),
+                    _buildStatusCard(context),
+                    const SizedBox(height: 40),
+                    RecordingButton(
+                      isRecording: recordingService.isRecording,
+                      duration: _currentDuration,
+                      enabled: _hasPermissions,
+                      onStart: _startRecording,
+                      onStop: _stopRecording,
+                    ),
+                    const SizedBox(height: 40),
+                    if (recordingService.isRecording) ...[
+                      _buildRecordingControls(),
+                      const SizedBox(height: 20),
+                      _buildWaveformPlaceholder(),
+                    ],
+                    const SizedBox(height: 40),
+                    _buildQuickActions(),
                   ],
-                  const SizedBox(height: 40),
-                  _buildQuickActions(),
-                ],
+                ),
               ),
-            ),
+      ),
     );
   }
 
-  Widget _buildStatusCard() {
-    final recordingService = ref.read(recordingServiceProvider);
-    
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            Icon(
-              recordingService.isRecording ? Icons.fiber_manual_record : Icons.mic_none,
-              color: recordingService.isRecording ? Colors.red : Colors.grey,
-              size: 32,
+  Widget _buildLoadingState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(20),
             ),
-            const SizedBox(height: 12),
-            Text(
-              recordingService.isRecording ? 'Recording in Progress' : 'Ready to Record',
-              style: Theme.of(context).textTheme.headlineSmall,
+            child: const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
             ),
-            if (_currentSessionId != null) ...[
-              const SizedBox(height: 8),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Initializing...',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
               Text(
-                'Session: ${_currentSessionId?.substring(0, 8)}...',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
+                'ClassMate',
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => GoRouter.of(context).go('/sessions'),
+                    icon: const Icon(Icons.history_rounded, color: Colors.white),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      padding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _showExitDialog,
+                    icon: const Icon(Icons.exit_to_app_rounded, color: Colors.white),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      padding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                ],
+              ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'AI-Powered Meeting Assistant',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Colors.white.withOpacity(0.9),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _buildStatusCard(BuildContext context) {
+    final recordingService = ref.read(recordingServiceProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: isDark ? AppTheme.cardGradient : null,
+        color: isDark ? null : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: recordingService.isRecording 
+                  ? AppTheme.errorColor.withOpacity(0.1)
+                  : AppTheme.successColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Icon(
+                    recordingService.isRecording ? Icons.fiber_manual_record : Icons.mic_none,
+                    color: recordingService.isRecording ? AppTheme.errorColor : AppTheme.successColor,
+                    size: 32,
+                    key: ValueKey(recordingService.isRecording),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  recordingService.isRecording ? 'Recording' : 'Ready',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: recordingService.isRecording ? AppTheme.errorColor : AppTheme.successColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            recordingService.isRecording ? 'Recording in Progress' : 'Ready to Record',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (_currentSessionId != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Session: ${_currentSessionId?.substring(0, 8)}...',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppTheme.primaryColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -342,6 +478,33 @@ class _RecordingPageState extends ConsumerState<RecordingPage> {
     final minutes = duration.inMinutes.toString().padLeft(2, '0');
     final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  void _showExitDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Exit App'),
+        content: const Text('Are you sure you want to exit ClassMate?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              SystemNavigator.pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Exit'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSuccess(String message) {

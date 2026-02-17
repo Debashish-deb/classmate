@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_theme.dart';
 
 import '../../features/onboarding/pages/onboarding_page.dart';
 import '../../features/recording/pages/recording_page.dart';
@@ -74,59 +76,145 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class MainNavigation extends ConsumerStatefulWidget {
+class MainNavigation extends ConsumerWidget {
   final Widget child;
   
   const MainNavigation({super.key, required this.child});
 
   @override
-  ConsumerState<MainNavigation> createState() => _MainNavigationState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-class _MainNavigationState extends ConsumerState<MainNavigation> {
-  int _currentIndex = 0;
+    final List<NavigationItem> _navigationItems = [
+      NavigationItem(
+        icon: Icons.mic_rounded,
+        activeIcon: Icons.mic,
+        label: 'Record',
+        route: '/recording',
+        gradient: AppTheme.primaryGradient,
+      ),
+      NavigationItem(
+        icon: Icons.history_rounded,
+        activeIcon: Icons.history,
+        label: 'Sessions',
+        route: '/sessions',
+        gradient: AppTheme.cardGradient,
+      ),
+      NavigationItem(
+        icon: Icons.note_alt_rounded,
+        activeIcon: Icons.note_alt,
+        label: 'Notes',
+        route: '/notes',
+        gradient: AppTheme.accentGradient,
+      ),
+      NavigationItem(
+        icon: Icons.settings_rounded,
+        activeIcon: Icons.settings,
+        label: 'Settings',
+        route: '/settings',
+        gradient: const LinearGradient(
+          colors: [Colors.grey, Colors.blueGrey],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+    ];
 
-  final List<NavigationItem> _navigationItems = [
-    NavigationItem(
-      icon: Icons.mic,
-      label: 'Record',
-      route: '/recording',
-    ),
-    NavigationItem(
-      icon: Icons.history,
-      label: 'Sessions',
-      route: '/sessions',
-    ),
-    NavigationItem(
-      icon: Icons.note,
-      label: 'Notes',
-      route: '/notes',
-    ),
-    NavigationItem(
-      icon: Icons.settings,
-      label: 'Settings',
-      route: '/settings',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
-      body: widget.child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          context.go(_navigationItems[index].route);
-        },
-        items: _navigationItems
-            .map((item) => BottomNavigationBarItem(
-                  icon: Icon(item.icon),
-                  label: item.label,
-                ))
-            .toList(),
+      extendBodyBehindAppBar: false,
+      body: child,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
+              blurRadius: 20,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: _navigationItems.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                final isActive = index == 0; // Default to record tab
+                
+                return _buildNavItem(context, item, isActive, index);
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: AppTheme.primaryGradient,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryColor.withOpacity(0.4),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () => GoRouter.of(context).go('/recording'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: const Icon(
+            Icons.add,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(BuildContext context, NavigationItem item, bool isActive, int index) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        GoRouter.of(context).go(item.route);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: isActive ? item.gradient : null,
+          color: isActive ? null : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                isActive ? item.activeIcon : item.icon,
+                key: ValueKey(isActive),
+                color: isActive ? Colors.white : Theme.of(context).iconTheme.color,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 4),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: isActive ? Colors.white : Theme.of(context).textTheme.bodySmall?.color,
+              ),
+              child: Text(item.label),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -134,13 +222,17 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 
 class NavigationItem {
   final IconData icon;
+  final IconData activeIcon;
   final String label;
   final String route;
+  final LinearGradient gradient;
 
   NavigationItem({
     required this.icon,
+    required this.activeIcon,
     required this.label,
     required this.route,
+    required this.gradient,
   });
 }
 
