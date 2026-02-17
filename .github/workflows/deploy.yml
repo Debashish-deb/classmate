@@ -1,0 +1,74 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/classmate
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << 'DEPLOY_SCRIPT'
+            cd /opt/classmate
+            
+            # Pull latest code
+            git pull origin main
+            
+            # Pull latest images
+            docker compose -f docker-compose.prod.yml pull
+            
+            # Rolling update (zero downtime)
+            docker compose -f docker-compose.prod.yml up -d --no-deps --build api
+            
+            # Wait for health check
+            echo "Waiting for API health check..."
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8000/health > /dev/null; then
+                echo "API is healthy!"
+                break
+              fi
+              echo "Attempt $i/30..."
+              sleep 2
+            done
+            
+            # Update remaining services
+            docker compose -f docker-compose.prod.yml up -d
+            
+            # Prune old images
+            docker image prune -f
+            
+            echo "Deployment complete!"
+          DEPLOY_SCRIPT
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          echo "Deployment to ${{ github.event.inputs.environment }} completed with status: ${{ job.status }}"

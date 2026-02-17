@@ -1,216 +1,127 @@
-# ClassMate - AI-Powered Lecture Recording & Note-Taking
+# ClassMate - AI-Powered Scalable Lecture Recorder
 
-ClassMate is a comprehensive mobile application for recording lectures, transcribing audio using AI, and generating intelligent notes automatically.
+ClassMate is a production-grade mobile application and backend system for recording lectures, transcribing audio using AI, and generating intelligent notes. It features a **Hybrid Scalable Architecture** designed for 100k+ users.
 
 ## 🏗️ Architecture
 
-This project follows a monorepo structure:
+The system uses a hybrid approach combining **Firebase** for identity/sync and a **Dockerized AI Backend** for heavy lifting.
 
-```
-classmate/
-├── mobile_app/          # Flutter client (Android/iOS)
-├── ai_backend/          # FastAPI services
-├── ai_workers/          # Heavy processing workers
-├── shared_contracts/    # API schemas
-├── infra/               # Docker, Terraform, K8s
-├── docs/
-└── scripts/
-```
-
-## 📱 Mobile App Structure
-
-The Flutter app follows a feature-based architecture:
-
-```
-mobile_app/lib/
-├── core/
-│   ├── theme/           # App theming
-│   ├── routing/         # Navigation
-│   ├── errors/          # Error handling
-│   ├── permissions/     # Permission management
-│   └── utils/           # Utilities
-├── features/
-│   ├── onboarding/      # First-time user experience
-│   ├── recording/       # Audio recording interface
-│   ├── processing/      # Transcription progress
-│   ├── notes/           # View and edit notes
-│   ├── export/          # PDF export functionality
-│   ├── sessions/        # Session history
-│   └── settings/        # App configuration
-├── shared/
-│   ├── widgets/         # Reusable UI components
-│   ├── models/          # Data models
-│   └── services/        # Core services
-└── main.dart
+```mermaid
+graph TD
+    Client[Flutter Mobile App] -->|Auth & Sync| Firebase[Firebase Auth/Firestore]
+    Client -->|API Requests| Traefik[Traefik Gateway]
+    
+    subgraph "Control Plane"
+        Traefik -->|Route| Backend[FastAPI Backend]
+        Traefik -->|Route| Frontend[Web Dashboard]
+    end
+    
+    subgraph "Data & Scaling"
+        Backend -->|Pooling| PgBouncer[PgBouncer]
+        PgBouncer -->|Persist| DB[(PostgreSQL 15)]
+        Backend -->|Queue| Redis[Redis]
+        Redis -->|Process| Worker[Celery AI Worker]
+    end
+    
+    subgraph "Observability"
+        Backend -.->|Trace| Jaeger[Jaeger]
+        Backend -.->|Log| Loki[Loki]
+    end
 ```
 
-## 🎯 Key Features
+### Key Technologies
 
-### Audio Recording
-- **Chunked Recording**: 30-second chunks with 1-second overlap
-- **Whisper Compatibility**: 16kHz mono PCM 16-bit WAV format
-- **Background Recording**: Foreground service with proper Android handling
-- **Real-time Waveform**: Visual feedback during recording
-
-### AI Processing
-- **Speech-to-Text**: Faster-Whisper integration
-- **Note Generation**: AI-powered summarization
-- **Speaker Detection**: Multiple speaker identification
-- **Key Point Extraction**: Automatic highlighting
-
-### Data Management
-- **Offline Queue**: Resumable uploads with retry logic
-- **Local Storage**: SQLite for session management
-- **Cloud Sync**: Automatic synchronization
-- **Export Options**: PDF and other formats
+- **Backend**: Python 3.13 (FastAPI), SQLAlchemy (Async), Celery
+- **Database**: PostgreSQL 15 with PgBouncer (Connection Pooling)
+- **Infrastructure**: Docker Compose, Traefik (Gateway), Redis
+- **Observability**: OpenTelemetry, Jaeger, Loki, Grafana
+- **Security**: Firebase Auth, Role-Based Access, Audit Logging
 
 ## 🚀 Getting Started
 
 ### Prerequisites
+
+- Docker Desktop (Running)
 - Flutter SDK (>=3.10.8)
-- Dart SDK
-- Android Studio / Xcode
-- Git
+- Firebase Project (configured)
 
-### Setup
+### 1. Backend Setup (Docker)
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd classmate
-   ```
+The entire backend stack is containerized.
 
-2. **Set up Flutter app**
-   ```bash
-   cd mobile_app
-   flutter pub get
-   flutter run
-   ```
-
-3. **Configure permissions**
-   - Android: Update `android/app/src/main/AndroidManifest.xml`
-   - iOS: Update `ios/Runner/Info.plist`
-
-4. **Run tests**
-   ```bash
-   flutter test
-   ```
-
-## 🧪 Testing Strategy
-
-### Unit Tests
-- Service layer testing
-- Model validation
-- Business logic verification
-
-### Integration Tests
-- Recording pipeline
-- Upload queue functionality
-- Background processing
-
-### UI Tests
-- User flows
-- Component interactions
-- Error scenarios
-
-## 🔧 Development
-
-### State Management
-- **Riverpod**: Compile-time safe state management
-- **Providers**: Dependency injection and state containers
-
-### Code Generation
 ```bash
-# Run code generation
-flutter packages pub run build_runner build
+# 1. Clone repository
+git clone <repository-url>
+cd classmate
 
-# Watch for changes
-flutter packages pub run build_runner watch
+# 2. Add Firebase Credentials
+# Place your firebase-service-account.json in ai_backend/
+
+# 3. Start the Stack
+docker-compose up -d --build
 ```
 
-### Architecture Patterns
-- **Clean Architecture**: Separation of concerns
-- **Repository Pattern**: Data access abstraction
-- **Service Layer**: Business logic encapsulation
+**Services:**
 
-## 📦 Dependencies
+- **API Gateway**: `http://localhost:8080` (Traefik Dashboard)
+- **Backend API**: `http://localhost:80/api/v1/public/health`
+- **Observability**: `http://localhost:3001` (Grafana), `http://localhost:16686` (Jaeger)
 
-### Core
-- `flutter_riverpod`: State management
-- `go_router`: Navigation
-- `dio`: HTTP client
+### 2. Mobile App Setup
 
-### Audio
-- `record`: Audio recording
-- `flutter_sound`: Advanced audio features
-- `permission_handler`: Permissions
-
-### Storage
-- `sqflite`: Local database
-- `shared_preferences`: Simple storage
-- `path_provider`: File system access
-
-### Background
-- `flutter_background_service`: Background tasks
-- `workmanager`: Scheduled tasks
-
-## 🔒 Security
-
-- **API Keys**: Environment-based configuration
-- **Data Encryption**: Local storage encryption
-- **Network Security**: HTTPS certificate pinning
-- **Privacy Compliance**: GDPR and CCPA ready
-
-## 📊 Performance
-
-### Optimization
-- **Lazy Loading**: On-demand data fetching
-- **Memory Management**: Efficient audio buffering
-- **Battery Optimization**: Smart background processing
-- **Network Efficiency**: Chunked uploads
-
-### Monitoring
-- **Analytics**: User behavior tracking
-- **Crash Reporting**: Automatic error collection
-- **Performance Metrics**: Response time monitoring
-
-## 🚀 Deployment
-
-### Android
 ```bash
-flutter build apk --release
-flutter build appbundle --release
+cd mobile_app
+flutter pub get
+flutter run
 ```
 
-### iOS
+## 🔒 Security & Privacy
+
+### Identity & Access
+
+- **Hybrid Auth**: Firebase Authentication handles identity.
+- **Identity Bridge**: Automatically syncs Firebase users to the internal PostgreSQL database.
+- **Role-Based Access**: strict rules in `firestore.rules` and `storage.rules`.
+
+### Data Integrity
+
+- **Option 5:** Stop all servers.
+- **Option 6:** View server logs (backend API and workers).
+- **Option 7:** Run full health check.
+- **Option 8:** Restart everything (one-click fix) and run the app.
+- **Audit Logging**: All database mutations are tracked in `audit_logs`.
+- **Soft Deletes**: Data is never permanently lost immediately (`deleted_at` support).
+- **GDPR Compliance**: Automated workers available for data purging.
+
+### Encryption
+
+- **At Rest**: PostgreSQL data volume encryption recommended for prod.
+- **In Transit**: All API traffic served via HTTPS (Traefik can handle Let's Encrypt).
+
+## 🧪 Testing
+
+### Automated Verification
+
+Run the verification script to check stack health:
+
 ```bash
-flutter build ios --release
+./scripts/verify_deployment.sh
 ```
 
-### CI/CD
-- **GitHub Actions**: Automated testing and building
-- **Fastlane**: Deployment automation
-- **Code Signing**: Automated certificate management
+### Manual Testing
+
+1. **Auth**: Login via Flutter app -> Check `users` table in Postgres.
+2. **Transcription**: Record audio -> detailed logs in Grafana -> Transcript appears in DB.
+3. **Load**: `docker-compose up --scale worker=3` to test horizontal scaling.
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+1. Fork the repo
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-For support and questions:
-- Create an issue on GitHub
-- Check the documentation
-- Join our community Discord
-
----
-
-**Built with ❤️ for students and educators**
+MIT License

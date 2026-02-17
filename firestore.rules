@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ==========================================
+    // DEVICE SESSION SECURITY RULES (CRITICAL)
+    // ==========================================
+    
+    // User sessions - MUST prevent unauthorized access
+    match /user_sessions/{userId}/devices/{deviceId} {
+      // Read: Only own devices
+      allow read: if isOwner(userId);
+      
+      // Create/Update: Only own devices with validation
+      allow create, update: if isOwner(userId)
+                            // Must match deviceId
+                            && request.resource.data.deviceId == deviceId
+                            // Required fields must exist
+                            && request.resource.data.keys().hasAll([
+                              'deviceId', 'deviceName', 'platform',
+                              'appVersion', 'status', 'lastActive'
+                            ])
+                            // Platform must be valid
+                            && request.resource.data.platform in ['android', 'ios']
+                            // Status must be valid
+                            && request.resource.data.status in ['active', 'revoked', 'expired']
+                            // Device name length limit
+                            && request.resource.data.deviceName is string
+                            && request.resource.data.deviceName.size() > 0
+                            && request.resource.data.deviceName.size() <= 100;
+      
+      // Delete: Only own devices
+      allow delete: if isOwner(userId);
+    }
+
+    // ==========================================
+    // USER DATA - Prevent privilege escalation
+    // ==========================================
+    
+    match /users/{userId} {
+      // Anyone authenticated can read basic user info
+      allow read: if isAuthenticated();
+      
+      // Only owner can create their own profile
+      allow create: if isOwner(userId);
+      
+      // Only owner can update, but prevent self-promotion
+      allow update: if isOwner(userId)
+                    // CRITICAL: Prevent self-promotion to premium
+                    && (!request.resource.data.diff(resource.data)
+                       .affectedKeys().hasAny(['isPremium']))
+                    // CRITICAL: Prevent maxDevices manipulation
+                    && (!request.resource.data.diff(resource.data)
+                       .affectedKeys().hasAny(['maxDevices']));
+      
+      // User data subcollections
+      match /data/{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // ==========================================
+    // SECURITY AUDIT LOG
+    // ==========================================
+    
+    match /security_audit_log/{logId} {
+      // Write only - admins can read via console
+      allow read: if false;
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // ==========================================
+    // EXISTING COLLECTIONS (Keep current rules)
+    // ==========================================
+
+    // Posts: Anyone can read, only creator can update/delete
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.ownerId;
+    }
+
+    // Comments: Anyone can read, only comment owner can update/delete
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Likes: Anyone can read, only user who liked can delete
+    match /likes/{likeId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Notifications: Only owner can read/write
+    match /notifications/{notificationId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Admin-only area: Only admins can read, nobody can write
+    match /admin/{document=**} {
+      allow read: if isAuthenticated() && request.auth.token.admin == true;
+      allow write: if false;
+    }
+
+    // Default Deny All (CRITICAL: Blocks everything not explicitly allowed)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

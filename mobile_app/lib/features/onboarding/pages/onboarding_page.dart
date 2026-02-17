@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
@@ -65,6 +67,10 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                   setState(() {
                     _currentPage = index;
                   });
+                  // Request mic permission on the "Record Lectures" slide
+                  if (index == 1) {
+                    Permission.microphone.request();
+                  }
                 },
                 itemCount: _steps.length,
                 itemBuilder: (context, index) {
@@ -194,8 +200,15 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     }
   }
 
-  void _getStarted() {
-    context.go('/recording');
+  Future<void> _getStarted() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_completed', true);
+    if (mounted) context.go('/recording');
+  }
+
+  static Future<bool> isOnboardingCompleted() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('onboarding_completed') ?? false;
   }
 }
 

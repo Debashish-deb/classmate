@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "592077187682",
+    "project_id": "classmate-3c4cc",
+    "storage_bucket": "classmate-3c4cc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592077187682:android:98920a61d7c9d0231dff3b",
+        "android_client_info": {
+          "package_name": "com.deb.classmate"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "592077187682-qef9ie0grecetbm43rebqma6i7hv414b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.deb.classmate",
+            "certificate_hash": "27c07ae55943b890b036d664aa64cad7bdc7285a"
+          }
+        },
+        {
+          "client_id": "592077187682-cvlkf4f8kjavpfqbqivtp8e7m6onsmn4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbF158DaBPQeX4KFXn-AsrL2YPTAwj3Hk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "592077187682-cvlkf4f8kjavpfqbqivtp8e7m6onsmn4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

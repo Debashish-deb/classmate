@@ -1,0 +1,116 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 80 }] } } },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "title": "Total Requests (1h)",
+      "type": "stat",
+      "targets": [{ "expr": "sum(increase(http_requests_total[1h]))", "legendFormat": "Requests" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "title": "Error Rate",
+      "type": "stat",
+      "targets": [{ "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) * 100", "legendFormat": "Error %" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "title": "P95 Latency",
+      "type": "stat",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95 (s)" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "title": "Active Sessions",
+      "type": "stat",
+      "targets": [{ "expr": "active_recording_sessions", "legendFormat": "Sessions" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 5,
+      "title": "Request Rate by Endpoint",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum(rate(http_requests_total[5m])) by (endpoint)", "legendFormat": "{{endpoint}}" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 6,
+      "title": "Response Time Distribution",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.90, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P90" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P99" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "id": 7,
+      "title": "AI Agent Requests",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum(rate(ai_agent_requests_total[5m])) by (agent_type)", "legendFormat": "{{agent_type}}" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "id": 8,
+      "title": "AI Agent Duration",
+      "type": "timeseries",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(ai_agent_duration_seconds_bucket[5m])) by (le, agent_type))", "legendFormat": "P95 {{agent_type}}" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 20 },
+      "id": 9,
+      "title": "Users",
+      "type": "stat",
+      "targets": [
+        { "expr": "registered_users_total", "legendFormat": "Total" },
+        { "expr": "premium_users_total", "legendFormat": "Premium" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 20 },
+      "id": 10,
+      "title": "Transcriptions",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum(rate(transcriptions_total[5m])) by (status)", "legendFormat": "{{status}}" }]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 20 },
+      "id": 11,
+      "title": "Auth Events",
+      "type": "timeseries",
+      "targets": [{ "expr": "sum(rate(auth_events_total[5m])) by (event_type)", "legendFormat": "{{event_type}}" }]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["classmate"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "ClassMate Overview",
+  "uid": "classmate-overview"
+}

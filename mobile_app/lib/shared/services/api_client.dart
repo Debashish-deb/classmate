@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../models/session_model.dart';
 
 class ApiClient {
@@ -14,6 +16,7 @@ class ApiClient {
   final Logger _logger = Logger();
   
   static const String _baseUrl = 'http://localhost:8000/api/v1';
+  static const String _userIdStorageKey = 'device_user_id';
 
   void _initializeDio() {
     _dio.options.baseUrl = _baseUrl;
@@ -32,12 +35,24 @@ class ApiClient {
     ));
   }
 
+  Future<String> _getOrCreateUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existingId = prefs.getString(_userIdStorageKey);
+    if (existingId != null && existingId.isNotEmpty) {
+      return existingId;
+    }
+    final newId = const Uuid().v4();
+    await prefs.setString(_userIdStorageKey, newId);
+    return newId;
+  }
+
   // Session Management
   Future<SessionModel> createSession(String title, {String? userId}) async {
     try {
+      final effectiveUserId = userId ?? await _getOrCreateUserId();
       final response = await _dio.post('/sessions', data: {
         'title': title,
-        'user_id': userId ?? 'default_user',
+        'user_id': effectiveUserId,
       });
 
       if (response.statusCode == 201) {

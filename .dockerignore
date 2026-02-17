@@ -1,0 +1,42 @@
+# Version Control
+.git
+.gitignore
+
+# IDEs
+.idea
+.vscode
+.DS_Store
+
+# Python
+**/venv
+**/env
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.Python
+**/*.egg-info
+**/.coverage
+**/.tox
+**/.pytest_cache
+
+# Databases
+*.db
+*.sqlite3
+agent_memory.db
+classmate.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Node
+**/node_modules
+
+# Mobile App (not needed for backend/frontend web)
+mobile_app/
+
+# Docs (not needed for runtime)
+docs/

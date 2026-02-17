@@ -11,7 +11,7 @@ class CalendarEvent(Base):
     
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    provider = Column(String, nullable=False)  # 'google' or 'microsoft'
+    provider = Column(String, nullable=False)  # 'google' only
     summary = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     start_time = Column(DateTime, nullable=False)

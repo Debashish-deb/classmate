@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/services/session_manager.dart';
 
 final sessionManagerProvider = Provider<SessionManager>((ref) => SessionManager());
@@ -18,6 +21,8 @@ class _NotesPageState extends ConsumerState<NotesPage> {
   List<Session> _sessions = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  bool _showSearch = false;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -51,24 +56,86 @@ class _NotesPageState extends ConsumerState<NotesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Notes'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          'Notes',
+          style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: _showSearchDialog,
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.search_rounded, color: Colors.white),
+              onPressed: _toggleSearch,
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [AppTheme.errorColor, AppTheme.errorColor]),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.exit_to_app_rounded, color: Colors.white),
+              onPressed: _showExitDialog,
+            ),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _sessions.isEmpty
-              ? _buildEmptyState()
-              : _buildNotesList(),
+      body: Column(
+        children: [
+          if (_showSearch) _buildSearchBar(),
+          Expanded(
+            child: _isLoading
+                ? _buildLoadingState()
+                : _sessions.isEmpty
+                    ? _buildEmptyState()
+                    : _buildNotesList(),
+          ),
+        ],
+      ),
     );
   }
 
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Loading notes...',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -76,30 +143,57 @@ class _NotesPageState extends ConsumerState<NotesPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.note_alt_outlined,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No notes yet',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.grey[600],
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                gradient: AppTheme.cardGradient,
+                borderRadius: BorderRadius.circular(20),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your AI-generated notes will appear here',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[500],
+              child: Icon(
+                Icons.note_alt_outlined,
+                size: 64,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => context.go('/recording'),
-              icon: const Icon(Icons.mic),
-              label: const Text('Start Recording'),
+            Text(
+              'No notes yet',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Your AI-generated notes will appear here',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Container(
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () => GoRouter.of(context).go('/recording'),
+                icon: const Icon(Icons.mic, color: Colors.white),
+                label: const Text('Start Recording', style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                ),
+              ),
             ),
           ],
         ),
@@ -177,26 +271,77 @@ ACTION ITEMS:
     context.go('/export/${session.id}');
   }
 
-  void _showSearchDialog() {
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: TextField(
+        autofocus: true,
+        decoration: InputDecoration(
+          hintText: 'Search notes...',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () {
+              setState(() {
+                _searchQuery = '';
+                _showSearch = false;
+              });
+            },
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.all(16),
+        ),
+        onChanged: (value) {
+          _debounceTimer?.cancel();
+          _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+            setState(() {
+              _searchQuery = value.toLowerCase();
+            });
+          });
+        },
+      ),
+    );
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _showSearch = !_showSearch;
+      if (!_showSearch) _searchQuery = '';
+    });
+  }
+
+  void _showExitDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Search Notes'),
-        content: TextField(
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Search in notes...',
-          ),
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
-        ),
+        title: const Text('Exit App'),
+        content: const Text('Are you sure you want to exit ClassMate?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              SystemNavigator.pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Exit'),
           ),
         ],
       ),
@@ -577,6 +722,12 @@ class NoteDetailPage extends StatelessWidget {
   }
 
   Widget _buildTranscript(BuildContext context) {
+    // Split transcript into paragraphs for lazy rendering to prevent OOM
+    final paragraphs = session.transcript!
+        .split('\n\n')
+        .where((p) => p.trim().isNotEmpty)
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -598,17 +749,27 @@ class NoteDetailPage extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.all(16),
+          constraints: const BoxConstraints(maxHeight: 400),
           decoration: BoxDecoration(
             color: Colors.grey[50],
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey.shade200),
           ),
-          child: Text(
-            session.transcript!,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontFamily: 'monospace',
-            ),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            shrinkWrap: true,
+            itemCount: paragraphs.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  paragraphs[index],
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],

@@ -62,6 +62,11 @@ classmate.db
 .DS_Store
 Thumbs.db
 
+# Secrets & Environment
+.env
+.env.*
+.encryption_master_key
+
 # General
 AI_CODE.md
 FRONTEND_CODE.md

@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import base64
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,27 @@ class EncryptionService:
     """End-to-end encryption service for ClassMate"""
     
     def __init__(self):
-        self.master_key = os.getenv("ENCRYPTION_MASTER_KEY", self._generate_master_key())
+        master_key = os.getenv("ENCRYPTION_MASTER_KEY")
+        master_key_file = os.getenv("ENCRYPTION_MASTER_KEY_FILE", ".encryption_master_key")
+
+        if master_key:
+            self.master_key = master_key
+        else:
+            if os.path.exists(master_key_file):
+                try:
+                    with open(master_key_file, "r", encoding="utf-8") as f:
+                        self.master_key = f.read().strip()
+                except Exception as e:
+                    logger.error(f"Failed to read master key file: {e}")
+                    self.master_key = self._generate_master_key()
+            else:
+                self.master_key = self._generate_master_key()
+                try:
+                    with open(master_key_file, "w", encoding="utf-8") as f:
+                        f.write(self.master_key)
+                except Exception as e:
+                    logger.error(f"Failed to persist generated master key: {e}")
+
         self.fernet = Fernet(self.master_key.encode())
     
     def _generate_master_key(self) -> str:

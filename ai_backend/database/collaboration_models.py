@@ -1,8 +1,11 @@
+import logging
 from sqlalchemy import Column, String, Integer, DateTime, Text, Boolean, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import json
+
+_logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -114,14 +117,14 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # OAuth tokens
+    # OAuth tokens — stored encrypted via EncryptionService
     google_access_token = Column(Text, nullable=True)
     google_refresh_token = Column(Text, nullable=True)
     google_token_expires = Column(DateTime, nullable=True)
     
-    microsoft_access_token = Column(Text, nullable=True)
-    microsoft_refresh_token = Column(Text, nullable=True)
-    microsoft_token_expires = Column(DateTime, nullable=True)
+    # Email/Password authentication
+    password_hash = Column(String, nullable=True)  # For email login
+    auth_method = Column(String, nullable=False, default="google")  # 'google' or 'email'
     
     # Encryption keys
     encryption_key = Column(Text, nullable=True)
@@ -135,3 +138,47 @@ class User(Base):
     comments = relationship("Comment", back_populates="user")
     annotations = relationship("Annotation", back_populates="user")
     api_keys = relationship("APIKey", back_populates="user")
+
+    def set_oauth_token(self, provider: str, token_type: str, value: str):
+        """Encrypt and store an OAuth token.
+        provider: 'google' only
+        token_type: 'access_token' or 'refresh_token'
+        """
+        from ..services.encryption_service import encryption_service
+        try:
+            encrypted = encryption_service.encrypt_sensitive_data({"token": value})
+            setattr(self, f"{provider}_{token_type}", encrypted)
+        except Exception as e:
+            _logger.error(f"Failed to encrypt {provider} {token_type}: {e}")
+            raise
+
+    def set_password(self, password: str):
+        """Hash and set password for email authentication."""
+        import bcrypt
+        salt = bcrypt.gensalt()
+        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+        self.auth_method = "email"
+
+    def check_password(self, password: str) -> bool:
+        """Verify password for email authentication."""
+        import bcrypt
+        if not self.password_hash:
+            return False
+        return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+
+    def get_oauth_token(self, provider: str, token_type: str) -> str | None:
+        """Decrypt and return an OAuth token.
+        provider: 'google' only
+        token_type: 'access_token' or 'refresh_token'
+        """
+        from ..services.encryption_service import encryption_service
+        raw = getattr(self, f"{provider}_{token_type}", None)
+        if not raw:
+            return None
+        try:
+            decrypted = encryption_service.decrypt_sensitive_data(raw)
+            return decrypted.get("token")
+        except Exception:
+            # Fallback: token may be stored in plaintext from before encryption was added
+            _logger.warning(f"Could not decrypt {provider} {token_type}, returning raw value")
+            return raw

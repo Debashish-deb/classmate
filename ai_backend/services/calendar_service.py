@@ -17,30 +17,21 @@ try:
 except ImportError:
     GOOGLE_CALENDAR_AVAILABLE = False
 
-# Microsoft Graph imports
-try:
-    from msal import ConfidentialClientApplication
-    from microsoft_graph import GraphServiceClient
-    MICROSOFT_GRAPH_AVAILABLE = True
-except ImportError:
-    MICROSOFT_GRAPH_AVAILABLE = False
+# Microsoft Graph imports (disabled)
+# Microsoft authentication has been removed
+MICROSOFT_GRAPH_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 class CalendarService:
-    """Calendar integration service supporting Google Calendar and Microsoft Outlook"""
+    """Calendar integration service supporting Google Calendar only"""
     
     def __init__(self):
         self.google_credentials = None
-        self.microsoft_token = None
         
         # Initialize Google Calendar
         if GOOGLE_CALENDAR_AVAILABLE:
             self._init_google_calendar()
-        
-        # Initialize Microsoft Graph
-        if MICROSOFT_GRAPH_AVAILABLE:
-            self._init_microsoft_graph()
     
     def _init_google_calendar(self):
         """Initialize Google Calendar service"""
@@ -64,18 +55,7 @@ class CalendarService:
         except Exception as e:
             logger.error(f"Failed to initialize Google Calendar: {e}")
     
-    def _init_microsoft_graph(self):
-        """Initialize Microsoft Graph service"""
-        try:
-            self.microsoft_app = ConfidentialClientApplication(
-                client_id=os.getenv("MICROSOFT_CLIENT_ID"),
-                client_credential=os.getenv("MICROSOFT_CLIENT_SECRET"),
-                authority="https://login.microsoftonline.com/common"
-            )
-            
-            logger.info("Microsoft Graph service initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Microsoft Graph: {e}")
+    # Microsoft Graph methods removed
     
     def get_google_auth_url(self, state: str = None) -> str:
         """Get Google Calendar authorization URL"""
@@ -102,23 +82,7 @@ class CalendarService:
             logger.error(f"Failed to generate Google auth URL: {e}")
             raise HTTPException(status_code=500, detail="Failed to generate auth URL")
     
-    def get_microsoft_auth_url(self, state: str = None) -> str:
-        """Get Microsoft Graph authorization URL"""
-        if not MICROSOFT_GRAPH_AVAILABLE:
-            raise HTTPException(status_code=501, detail="Microsoft Graph not available")
-        
-        try:
-            auth_url = self.microsoft_app.get_authorization_request_url(
-                scopes=['https://graph.microsoft.com/Calendars.Read'],
-                state=state,
-                redirect_uri=os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:8000/auth/microsoft/callback")
-            )
-            
-            return auth_url
-            
-        except Exception as e:
-            logger.error(f"Failed to generate Microsoft auth URL: {e}")
-            raise HTTPException(status_code=500, detail="Failed to generate auth URL")
+    # Microsoft auth methods removed
     
     async def handle_google_callback(self, code: str) -> Dict[str, Any]:
         """Handle Google Calendar OAuth callback"""
@@ -151,34 +115,7 @@ class CalendarService:
             logger.error(f"Failed to handle Google callback: {e}")
             raise HTTPException(status_code=500, detail="Failed to handle callback")
     
-    async def handle_microsoft_callback(self, code: str) -> Dict[str, Any]:
-        """Handle Microsoft Graph OAuth callback"""
-        if not MICROSOFT_GRAPH_AVAILABLE:
-            raise HTTPException(status_code=501, detail="Microsoft Graph not available")
-        
-        try:
-            # Exchange authorization code for tokens
-            result = self.microsoft_app.acquire_token_by_authorization_code(
-                code,
-                scopes=['https://graph.microsoft.com/Calendars.Read']
-            )
-            
-            if "error" in result:
-                raise HTTPException(status_code=400, detail=result["error_description"])
-            
-            # Store token
-            self.microsoft_token = result
-            
-            return {
-                "provider": "microsoft",
-                "access_token": result["access_token"],
-                "refresh_token": result.get("refresh_token"),
-                "expires_at": (datetime.utcnow() + timedelta(seconds=result["expires_in"])).isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to handle Microsoft callback: {e}")
-            raise HTTPException(status_code=500, detail="Failed to handle callback")
+    # Microsoft callback methods removed
     
     async def sync_google_calendar(self, user_id: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
         """Sync events from Google Calendar"""
@@ -227,51 +164,6 @@ class CalendarService:
             
         except HttpError as e:
             logger.error(f"Google Calendar API error: {e}")
-            raise HTTPException(status_code=500, detail=f"Calendar sync failed: {str(e)}")
-    
-    async def sync_microsoft_calendar(self, user_id: str, days_ahead: int = 7) -> List[Dict[str, Any]]:
-        """Sync events from Microsoft Outlook Calendar"""
-        if not MICROSOFT_GRAPH_AVAILABLE or not self.microsoft_token:
-            raise HTTPException(status_code=501, detail="Microsoft Graph not available or not authenticated")
-        
-        try:
-            # Initialize Graph client
-            graph_client = GraphServiceClient(
-                credential_provider=lambda: self.microsoft_token["access_token"]
-            )
-            
-            # Calculate time range
-            now = datetime.utcnow()
-            time_min = now.isoformat()
-            time_max = (now + timedelta(days=days_ahead)).isoformat()
-            
-            # Get events
-            query_options = f"?$filter=start/dateTime ge '{time_min}' and end/dateTime le '{time_max}'"
-            events = await graph_client.me.calendar.events.get(query_options)
-            
-            # Process events
-            processed_events = []
-            for event in events.value:
-                processed_event = {
-                    "id": event.id,
-                    "summary": event.subject or 'No Title',
-                    "description": event.body_preview or '',
-                    "start": event.start.dateTime if event.start else None,
-                    "end": event.end.dateTime if event.end else None,
-                    "location": event.location.displayName if event.location else '',
-                    "attendees": [attendee.email_address.name for attendee in event.attendees] if event.attendees else [],
-                    "provider": "microsoft",
-                    "user_id": user_id
-                }
-                processed_events.append(processed_event)
-            
-            # Store events in database
-            await self._store_calendar_events(processed_events, user_id)
-            
-            return processed_events
-            
-        except Exception as e:
-            logger.error(f"Microsoft Graph API error: {e}")
             raise HTTPException(status_code=500, detail=f"Calendar sync failed: {str(e)}")
     
     async def _store_calendar_events(self, events: List[Dict[str, Any]], user_id: str):

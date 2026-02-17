@@ -7,6 +7,9 @@ python-dotenv==1.0.1
 aiofiles==24.1.0
 httpx==0.27.0
 websockets==13.0
+psycopg[binary]==3.3.2
+cryptography==42.0.5
+openai>=1.12.0
 openai-whisper
 torch
 torchaudio
@@ -16,3 +19,39 @@ soundfile
 numpy
 scipy
 pydub
+bcrypt==4.1.1
+PyJWT==2.8.0
+firebase-admin==6.5.0
+structlog==24.4.0
+opentelemetry-api==1.26.0
+opentelemetry-sdk==1.26.0
+opentelemetry-instrumentation-fastapi==0.47b0
+opentelemetry-exporter-otlp==1.26.0
+psutil==6.0.0
+celery==5.3.6
+redis==5.0.1
+
+# LangChain AI Agent
+langchain==0.2.16
+langchain-openai==0.1.25
+langchain-community==0.2.16
+langchain-core==0.2.40
+
+# Vector DB (pgvector)
+pgvector==0.3.5
+
+# Monitoring
+prometheus-fastapi-instrumentator==7.0.0
+prometheus-client==0.21.0
+
+# Google OAuth + Calendar
+google-api-python-client==2.153.0
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+
+# Security
+slowapi==0.1.9
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bleach==6.1.0
+PyYAML==6.0.1

@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
+from .deps import get_current_user
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import secrets
 import logging
+import json
+import uuid
 from ..services.transcription_service import TranscriptionService
 from ..services.notes_service import NotesService
 from ..services.cloud_storage_service import cloud_storage_service
@@ -30,6 +33,8 @@ class APIKeyManager:
         try:
             api_key = f"cm_{secrets.token_urlsafe(32)}"
             key_id = str(uuid.uuid4())
+            hashed_key, salt = encryption_service.hash_password(api_key)
+            stored_hash = f"{salt}${hashed_key}"
             
             # Store in database
             with get_db() as db:
@@ -37,7 +42,7 @@ class APIKeyManager:
                     id=key_id,
                     user_id=user_id,
                     app_name=app_name,
-                    api_key_hash=encryption_service.hash_password(api_key)[0],
+                    api_key_hash=stored_hash,
                     permissions=json.dumps(permissions),
                     created_at=datetime.utcnow(),
                     expires_at=datetime.utcnow() + timedelta(days=365),
@@ -71,33 +76,38 @@ class APIKeyManager:
             
             # Validate API key in database
             with get_db() as db:
-                api_key_record = db.query(APIKey).filter(
-                    APIKey.is_active == True,
-                    APIKey.expires_at > datetime.utcnow()
-                ).first()
-                
-                if not api_key_record:
+                now = datetime.utcnow()
+                query = db.query(APIKey).filter(APIKey.is_active == True)
+                query = query.filter((APIKey.expires_at == None) | (APIKey.expires_at > now))
+                api_key_records = query.all()
+
+                if not api_key_records:
                     raise HTTPException(status_code=401, detail="Invalid or expired API key")
                 
-                # Verify the key
-                is_valid = encryption_service.verify_password(
-                    api_key, 
-                    api_key_record.api_key_hash, 
-                    ""  # Salt not needed for API keys
-                )
-                
-                if not is_valid:
+                matched_record = None
+                for record in api_key_records:
+                    stored = record.api_key_hash or ""
+                    salt = ""
+                    hashed = stored
+                    if "$" in stored:
+                        parts = stored.split("$", 1)
+                        salt = parts[0]
+                        hashed = parts[1]
+                    if encryption_service.verify_password(api_key, hashed, salt):
+                        matched_record = record
+                        break
+
+                if not matched_record:
                     raise HTTPException(status_code=401, detail="Invalid API key")
-                
-                # Update last used
-                api_key_record.last_used = datetime.utcnow()
+
+                matched_record.last_used = datetime.utcnow()
                 db.commit()
                 
                 return {
-                    "user_id": api_key_record.user_id,
-                    "app_name": api_key_record.app_name,
-                    "permissions": json.loads(api_key_record.permissions),
-                    "key_id": api_key_record.id
+                    "user_id": matched_record.user_id,
+                    "app_name": matched_record.app_name,
+                    "permissions": json.loads(matched_record.permissions),
+                    "key_id": matched_record.id
                 }
                 
         except HTTPException:
@@ -136,31 +146,32 @@ api_key_manager = APIKeyManager()
 @router.post("/transcribe")
 async def public_transcribe(
     request: Dict[str, Any],
-    auth_info: Dict[str, Any] = Depends(api_key_manager.validate_api_key)
+    current_user: dict = Depends(get_current_user)
 ):
     """Public API for audio transcription"""
     try:
-        # Check permissions
-        if "transcribe" not in auth_info["permissions"]:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        # User is already verified via Firebase
+        user_id = current_user.get("uid")
         
         # Validate request
         if "audio_url" not in request and "audio_data" not in request:
             raise HTTPException(status_code=400, detail="Audio URL or data required")
         
-        # Create transcription request
-        transcription_service = TranscriptionService()
+        # Offload to Celery worker check
+        from ..tasks import process_transcription_task
         
-        # Process transcription (simplified for public API)
-        result = {
-            "transcript": "This is a mock transcript for the public API",
-            "confidence": 0.95,
-            "language": "en",
-            "timestamp": datetime.utcnow().isoformat(),
-            "request_id": str(uuid.uuid4())
-        }
+        # Mocking session ID and path for the example
+        session_id = str(uuid.uuid4())
+        audio_path = request.get("audio_url", "mock_path")
         
-        return JSONResponse(content=result)
+        task = process_transcription_task.delay(session_id, audio_path)
+        
+        return JSONResponse(content={
+            "message": "Transcription queued",
+            "task_id": task.id,
+            "session_id": session_id,
+            "status": "processing"
+        })
         
     except HTTPException:
         raise
@@ -171,13 +182,11 @@ async def public_transcribe(
 @router.post("/generate-notes")
 async def public_generate_notes(
     request: Dict[str, Any],
-    auth_info: Dict[str, Any] = Depends(api_key_manager.validate_api_key)
+    current_user: dict = Depends(get_current_user)
 ):
     """Public API for AI note generation"""
     try:
-        # Check permissions
-        if "generate_notes" not in auth_info["permissions"]:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        user_id = current_user.get("uid")
         
         if "transcript" not in request:
             raise HTTPException(status_code=400, detail="Transcript required")
@@ -213,19 +222,16 @@ async def public_list_sessions(
     user_id: Optional[str] = None,
     limit: int = 10,
     offset: int = 0,
-    auth_info: Dict[str, Any] = Depends(api_key_manager.validate_api_key)
+    current_user: dict = Depends(get_current_user)
 ):
     """Public API to list sessions"""
     try:
-        # Check permissions
-        if "read_sessions" not in auth_info["permissions"]:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        # Check if user matches token
+        token_uid = current_user.get("uid")
+        if user_id and user_id != token_uid:
+             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Users can only access their own sessions unless they have admin permissions
-        if user_id and user_id != auth_info["user_id"] and "admin" not in auth_info["permissions"]:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        target_user_id = user_id or auth_info["user_id"]
+        target_user_id = user_id or token_uid
         
         with get_db() as db:
             query = db.query(Session).filter(Session.user_id == target_user_id)
@@ -263,14 +269,12 @@ async def public_list_sessions(
 @router.get("/sessions/{session_id}/transcript")
 async def public_get_transcript(
     session_id: str,
-    auth_info: Dict[str, Any] = Depends(api_key_manager.validate_api_key)
+    current_user: dict = Depends(get_current_user)
 ):
     """Public API to get session transcript"""
     try:
-        # Check permissions
-        if "read_transcripts" not in auth_info["permissions"]:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-        
+        token_uid = current_user.get("uid")
+
         with get_db() as db:
             # Get session
             session = db.query(Session).filter(Session.id == session_id).first()
@@ -278,7 +282,7 @@ async def public_get_transcript(
                 raise HTTPException(status_code=404, detail="Session not found")
             
             # Check access
-            if session.user_id != auth_info["user_id"] and "admin" not in auth_info["permissions"]:
+            if session.user_id != token_uid:
                 raise HTTPException(status_code=403, detail="Access denied")
             
             # Get transcript chunks
@@ -317,13 +321,12 @@ async def public_get_transcript(
 @router.post("/webhooks/transcription-complete")
 async def transcription_webhook(
     webhook_data: Dict[str, Any],
-    auth_info: Dict[str, Any] = Depends(api_key_manager.validate_api_key)
+    current_user: dict = Depends(get_current_user)
 ):
     """Webhook endpoint for transcription completion notifications"""
     try:
-        # Check permissions
-        if "webhooks" not in auth_info["permissions"]:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        # User is verified
+        user_id = current_user.get("uid")
         
         # Process webhook data
         session_id = webhook_data.get("session_id")
@@ -354,13 +357,11 @@ async def transcription_webhook(
 
 @router.get("/usage")
 async def get_api_usage(
-    auth_info: Dict[str, Any] = Depends(api_key_manager.validate_api_key)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get API usage statistics"""
     try:
-        # Check permissions
-        if "read_usage" not in auth_info["permissions"]:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        user_id = current_user.get("uid")
         
         # Mock usage data
         usage_data = {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
@@ -72,6 +73,15 @@ class UploadQueueService {
   }
 
   Future<void> enqueueUpload(String filePath, String sessionId, int chunkIndex) async {
+    // Deduplication: skip if same session+chunk is already queued
+    final alreadyQueued = _queue.any(
+      (t) => t.sessionId == sessionId && t.chunkIndex == chunkIndex,
+    );
+    if (alreadyQueued) {
+      _logger.d('Duplicate upload skipped: session=$sessionId chunk=$chunkIndex');
+      return;
+    }
+
     final task = UploadTask(
       filePath: filePath,
       sessionId: sessionId,
@@ -129,7 +139,7 @@ class UploadQueueService {
       });
 
       final response = await _dio.post(
-        'https://api.classmate.app/upload',
+        'http://localhost:8000/api/v1/upload',
         data: formData,
         options: Options(
           headers: {'Content-Type': 'multipart/form-data'},
@@ -174,8 +184,16 @@ class UploadQueueService {
       final prefs = await SharedPreferences.getInstance();
       final queueJson = prefs.getString('upload_queue');
       
-      if (queueJson != null) {
-        // Parse and restore queue from JSON
+      if (queueJson != null && queueJson.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(queueJson);
+        _queue.clear();
+        for (final item in decoded) {
+          try {
+            _queue.add(UploadTask.fromJson(item as Map<String, dynamic>));
+          } catch (e) {
+            _logger.w('Skipping corrupt queue entry: $e');
+          }
+        }
         _logger.d('Loaded ${_queue.length} tasks from storage');
       }
     } catch (e) {
@@ -186,7 +204,8 @@ class UploadQueueService {
   Future<void> _saveQueue() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Save queue to JSON
+      final jsonList = _queue.map((t) => t.toJson()).toList();
+      await prefs.setString('upload_queue', jsonEncode(jsonList));
       _logger.d('Saved ${_queue.length} tasks to storage');
     } catch (e) {
       _logger.e('Error saving upload queue: $e');

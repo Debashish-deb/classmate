@@ -1,0 +1,148 @@
+services:
+  # --- Gateway / Control Plane ---
+  proxy:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080" # Dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Observability ---
+  jaeger:
+    image: jaegertracing/all-in-one:1.45
+    ports:
+      - "16686:16686" # UI
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  loki:
+    image: grafana/loki:2.9.2
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:10.0
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # --- Application Services ---
+  backend:
+    build:
+      context: .
+      dockerfile: ai_backend/Dockerfile
+    volumes:
+      - ./ai_backend:/app/ai_backend
+      - ./uploads:/app/uploads
+    environment:
+      # Point to PgBouncer (port 6432) instead of direct DB
+      - DATABASE_URL=postgresql://app_user:app_password@pgbouncer:6432/classmate_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CORS_ALLOWED_ORIGINS=*
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/firebase-service-account.json
+    depends_on:
+      - pgbouncer
+      - redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`localhost`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=web"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: ai_backend/Dockerfile
+    command: celery -A ai_backend.worker.celery_app worker --loglevel=info
+    volumes:
+      - ./ai_backend:/app/ai_backend
+      - ./uploads:/app/uploads
+    environment:
+      - DATABASE_URL=postgresql://app_user:app_password@pgbouncer:6432/classmate_db
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - pgbouncer
+      - redis
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: web_app/Dockerfile
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`localhost`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      - DB_USER=app_user
+      - DB_PASSWORD=app_password
+      - DB_HOST=db
+      - DB_NAME=classmate_db
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=1000
+      - DEFAULT_POOL_SIZE=20
+    ports:
+      - "6432:5432" # Maps host 6432 to container 5432 (standard pgbouncer port inside generic images might vary, edoburu uses 5432 by default)
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=app_user
+      - POSTGRES_PASSWORD=app_password
+      - POSTGRES_DB=classmate_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

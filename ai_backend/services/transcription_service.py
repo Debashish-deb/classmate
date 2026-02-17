@@ -20,8 +20,7 @@ class TranscriptionService:
     def load_model(self):
         """Load the Whisper model"""
         try:
-            # Use medium model for good balance of speed and accuracy
-            model_name = "medium"
+            model_name = os.getenv("WHISPER_MODEL_SIZE", "medium")
             self.model = whisper.load_model(model_name, device=self.device)
             print(f"Whisper model loaded on {self.device}")
         except Exception as e:
@@ -60,27 +59,43 @@ class TranscriptionService:
                 confidences = [seg.get("avg_logprob", 0.0) for seg in segments if "avg_logprob" in seg]
                 confidence = sum(confidences) / len(confidences) if confidences else None
 
-            # Save to database
+            # Save to database (idempotent: skip if chunk already exists)
             chunk_id = str(uuid.uuid4())
             with get_db() as db:
-                # Create transcript chunk
-                transcript_chunk = TranscriptChunk(
-                    id=chunk_id,
-                    session_id=request.session_id,
-                    chunk_index=request.chunk_index,
-                    text=text,
-                    timestamp=datetime.utcnow(),
-                    confidence=confidence
-                )
-                db.add(transcript_chunk)
-                db.commit()
+                existing = db.query(TranscriptChunk).filter(
+                    TranscriptChunk.session_id == request.session_id,
+                    TranscriptChunk.chunk_index == request.chunk_index,
+                ).first()
+
+                if existing:
+                    # Already transcribed — return existing data
+                    chunk_id = existing.id
+                    text = existing.text
+                    confidence = existing.confidence
+                else:
+                    recorded_at = getattr(request, 'recorded_at', None)
+                    transcript_chunk = TranscriptChunk(
+                        id=chunk_id,
+                        session_id=request.session_id,
+                        chunk_index=request.chunk_index,
+                        text=text,
+                        timestamp=datetime.utcnow(),
+                        recorded_at=recorded_at,
+                        confidence=confidence
+                    )
+                    db.add(transcript_chunk)
+                    db.commit()
 
                 # Update session
                 session = db.query(Session).filter(Session.id == request.session_id).first()
                 if session:
-                    session.uploaded_chunks += 1
+                    # Count actual chunks in DB to avoid double-counting on retries
+                    actual_count = db.query(TranscriptChunk).filter(
+                        TranscriptChunk.session_id == request.session_id
+                    ).count()
+                    session.uploaded_chunks = actual_count
                     session.updated_at = datetime.utcnow()
-                    if session.uploaded_chunks >= session.total_chunks:
+                    if session.uploaded_chunks >= session.total_chunks and session.total_chunks > 0:
                         session.status = "completed"
                     db.commit()
 

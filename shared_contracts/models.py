@@ -44,6 +44,7 @@ class TranscriptionRequest(BaseModel):
     session_id: str
     chunk_index: int
     audio_file_path: str
+    recorded_at: Optional[datetime] = None  # Client-side capture timestamp
 
 class TranscriptionResponse(BaseModel):
     id: str
