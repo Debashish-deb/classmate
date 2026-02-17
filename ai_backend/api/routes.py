@@ -1,12 +1,14 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import JSONResponse
 from datetime import datetime
 import os
 import uuid
 import tempfile
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from ..services.transcription_service import TranscriptionService
 from ..services.notes_service import NotesService
+from ..services.websocket_service import WebSocketService
 from ..shared_contracts.models import (
     SessionCreateRequest, SessionResponse, TranscriptionRequest, 
     TranscriptionResponse, NotesGenerationRequest, NotesResponse,
@@ -20,6 +22,15 @@ router = APIRouter(prefix="/api/v1")
 # Initialize services
 transcription_service = TranscriptionService()
 notes_service = NotesService()
+websocket_service = WebSocketService()
+
+class TranscriptionResponseWithMeta(BaseModel):
+    response: TranscriptionResponse
+    meta: Optional[Dict[str, Any]] = None
+
+class NotesResponseWithMeta(BaseModel):
+    response: NotesResponse
+    meta: Optional[Dict[str, Any]] = None
 
 @router.post("/sessions", response_model=SessionResponse)
 async def create_session(request: SessionCreateRequest):
@@ -121,19 +132,41 @@ async def list_sessions(user_id: str = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
 
-@router.post("/transcribe", response_model=TranscriptionResponse)
-async def transcribe_audio(request: TranscriptionRequest):
+@router.post("/transcribe")
+async def transcribe_audio(request: TranscriptionRequest, include_meta: Optional[bool] = False):
     """Transcribe an audio chunk"""
     try:
-        return await transcription_service.transcribe_audio(request)
+        response = await transcription_service.transcribe_audio(request)
+        if include_meta:
+            return TranscriptionResponseWithMeta(
+                response=response,
+                meta={
+                    "segments": getattr(response, "segments", None),
+                    "corrections": getattr(response, "corrections", None),
+                    "session_context": getattr(response, "session_context", None),
+                    "language": getattr(response, "language", None),
+                    "processing_time": getattr(response, "processing_time", None),
+                }
+            )
+        return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
-@router.post("/generate-notes", response_model=NotesResponse)
-async def generate_notes(request: NotesGenerationRequest):
+@router.post("/generate-notes")
+async def generate_notes(request: NotesGenerationRequest, include_meta: Optional[bool] = False):
     """Generate AI-powered notes from transcript"""
     try:
-        return await notes_service.generate_notes(request)
+        response = await notes_service.generate_notes(request)
+        if include_meta:
+            return NotesResponseWithMeta(
+                response=response,
+                meta={
+                    "evaluation": getattr(response, "evaluation", None),
+                    "agent_meta": getattr(response, "agent_meta", None),
+                    "memory": getattr(response, "memory", None),
+                }
+            )
+        return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Notes generation failed: {str(e)}")
 
@@ -199,3 +232,8 @@ async def get_transcript(session_id: str):
         return JSONResponse({"transcript": transcript})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get transcript: {str(e)}")
+
+@router.websocket("/ws/transcribe/{session_id}/{user_id}")
+async def websocket_transcribe(websocket: WebSocket, session_id: str, user_id: str):
+    """WebSocket endpoint for real-time transcription"""
+    await websocket_service.handle_websocket_connection(websocket, session_id, user_id)

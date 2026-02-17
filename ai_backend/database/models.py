@@ -1,9 +1,17 @@
 from sqlalchemy import Column, String, Integer, DateTime, Text, Float
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
-from .database import SessionStatus
+from enum import Enum
 
-class Session(declarative_base):
+class SessionStatus(Enum):
+    recording = "recording"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+Base = declarative_base()
+
+class Session(Base):
     __tablename__ = "sessions"
     
     id = Column(String, primary_key=True, index=True)
@@ -22,7 +30,7 @@ class Session(declarative_base):
     key_points = Column(Text, nullable=True)  # JSON string
     action_items = Column(Text, nullable=True)  # JSON string
 
-class TranscriptChunk(declarative_base):
+class TranscriptChunk(Base):
     __tablename__ = "transcript_chunks"
     
     id = Column(String, primary_key=True, index=True)

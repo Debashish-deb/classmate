@@ -21,7 +21,7 @@ class TranscriptionService:
         """Load the Whisper model"""
         try:
             # Use medium model for good balance of speed and accuracy
-            model_name = "openai/whisper-medium"
+            model_name = "medium"
             self.model = whisper.load_model(model_name, device=self.device)
             print(f"Whisper model loaded on {self.device}")
         except Exception as e:
@@ -44,7 +44,7 @@ class TranscriptionService:
             # Transcribe
             result = self.model.transcribe(
                 audio.numpy(),
-                language="english",  # Auto-detect language
+                language=None,
                 task="transcribe",
                 word_timestamps=True,
                 fp16=torch.float16 if self.device == "cuda" else torch.float32

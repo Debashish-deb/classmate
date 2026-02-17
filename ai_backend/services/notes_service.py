@@ -5,11 +5,12 @@ from fastapi import HTTPException
 from ..database.models import Session
 from ..database import get_db
 from ..shared_contracts.models import NotesGenerationRequest, NotesResponse
+from ..agents import NotesOrchestrator
 
 class NotesService:
     def __init__(self):
         # Could initialize AI model here for note generation
-        pass
+        self.orchestrator = NotesOrchestrator()
 
     async def generate_notes(self, request: NotesGenerationRequest) -> NotesResponse:
         """Generate AI-powered notes from transcript"""
@@ -25,80 +26,36 @@ class NotesService:
                 if not transcript:
                     raise HTTPException(status_code=400, detail="No transcript available for this session")
 
-            # Generate notes (simplified for now - in production, use actual AI model)
-            summary = self._generate_summary(transcript) if request.include_summary else None
-            key_points = self._extract_key_points(transcript) if request.include_key_points else []
-            action_items = self._extract_action_items(transcript) if request.include_action_items else []
+                agent_result = await self.orchestrator.run(
+                    session_id=request.session_id,
+                    transcript=transcript,
+                    include_summary=request.include_summary,
+                    include_key_points=request.include_key_points,
+                    include_action_items=request.include_action_items,
+                )
 
-            # Update session with generated notes
-            session.summary = summary
-            session.key_points = json.dumps(key_points) if key_points else None
-            session.action_items = json.dumps(action_items) if action_items else None
-            session.status = "completed"
-            session.updated_at = datetime.utcnow()
-            db.commit()
+                summary = agent_result.get("summary")
+                key_points = agent_result.get("key_points") or []
+                action_items = agent_result.get("action_items") or []
 
-            return NotesResponse(
-                session_id=request.session_id,
-                summary=summary,
-                key_points=key_points,
-                action_items=action_items
-            )
+                # Update session with generated notes
+                session.summary = summary
+                session.key_points = json.dumps(key_points) if key_points else None
+                session.action_items = json.dumps(action_items) if action_items else None
+                session.status = "completed"
+                session.updated_at = datetime.utcnow()
+                db.commit()
+
+                return NotesResponse(
+                    session_id=request.session_id,
+                    summary=summary or "",
+                    key_points=key_points,
+                    action_items=action_items,
+                    generated_at=datetime.utcnow(),
+                    evaluation=agent_result.get("evaluation"),
+                    agent_meta=agent_result.get("agent_meta"),
+                    memory=agent_result.get("memory"),
+                )
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Notes generation failed: {str(e)}")
-
-    def _generate_summary(self, transcript: str) -> str:
-        """Generate a summary of the transcript"""
-        # Simplified summary generation - in production, use actual AI model
-        sentences = transcript.split('. ')
-        sentences = [s.strip() for s in sentences if s.strip()]
-        
-        if len(sentences) <= 2:
-            return transcript
-        
-        # Take first few sentences as summary
-        summary_sentences = sentences[:3]
-        return '. '.join(summary_sentences)
-
-    def _extract_key_points(self, transcript: str) -> List[str]:
-        """Extract key points from transcript"""
-        # Simplified key point extraction - look for important keywords
-        key_points = []
-        sentences = transcript.split('. ')
-        
-        important_keywords = [
-            "important", "key", "main", "primary", "essential", "critical",
-            "remember", "note", "pay attention", "focus on", "highlight"
-        ]
-        
-        for sentence in sentences:
-            sentence = sentence.strip().lower()
-            if any(keyword in sentence for keyword in important_keywords):
-                # Clean up the sentence
-                key_point = sentence.capitalize()
-                if len(key_point) > 10:  # Only include meaningful points
-                    key_points.append(key_point)
-        
-        return key_points[:5]  # Limit to top 5 key points
-
-    def _extract_action_items(self, transcript: str) -> List[str]:
-        """Extract action items from transcript"""
-        # Simplified action item extraction - look for action verbs
-        action_items = []
-        sentences = transcript.split('. ')
-        
-        action_verbs = [
-            "should", "must", "need to", "have to", "will", "can",
-            "do", "make", "create", "implement", "complete", "finish"
-        ]
-        
-        for sentence in sentences:
-            sentence = sentence.strip().lower()
-            if any(verb in sentence for verb in action_verbs):
-                # Clean up the sentence
-                action_item = sentence.capitalize()
-                if len(action_item) > 10:  # Only include meaningful items
-                    action_items.append(action_item)
-        
-        return action_items[:5]  # Limit to top 5 action items

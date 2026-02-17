@@ -7,6 +7,13 @@ import logging
 from celery import Celery
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import sys
+import pathlib
+
+# Add ai_backend to path
+sys.path.append(str(pathlib.Path(__file__).parent.parent / "ai_backend"))
+
+from agents import NotesOrchestrator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,30 +34,30 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False)
 
 class NotesWorker:
     def __init__(self):
-        pass
+        self.orchestrator = NotesOrchestrator()
         
     async def generate_notes(self, session_id: str, transcript: str, 
                            include_summary: bool = True,
                            include_key_points: bool = True,
                            include_action_items: bool = True) -> Dict[str, Any]:
-        """Generate AI-powered notes from transcript - simplified mock implementation"""
+        """Generate AI-powered notes using multi-agent orchestrator"""
         try:
-            # Mock notes generation - in production, use actual AI model
+            result = await self.orchestrator.run(
+                session_id=session_id,
+                transcript=transcript,
+                include_summary=include_summary,
+                include_key_points=include_key_points,
+                include_action_items=include_action_items,
+            )
             notes = {
                 "session_id": session_id,
-                "summary": None,
-                "key_points": [],
-                "action_items": []
+                "summary": result.get("summary"),
+                "key_points": result.get("key_points", []),
+                "action_items": result.get("action_items", []),
+                "evaluation": result.get("evaluation"),
+                "agent_meta": result.get("agent_meta"),
+                "memory": result.get("memory"),
             }
-            
-            if include_summary:
-                notes["summary"] = self._generate_mock_summary(transcript)
-            
-            if include_key_points:
-                notes["key_points"] = self._extract_mock_key_points(transcript)
-            
-            if include_action_items:
-                notes["action_items"] = self._extract_mock_action_items(transcript)
             
             # Save to database
             await self.save_notes_to_db(notes)
@@ -62,55 +69,6 @@ class NotesWorker:
             logger.error(f"Notes generation failed: {e}")
             raise
     
-    def _generate_mock_summary(self, transcript: str) -> str:
-        """Generate a mock summary"""
-        sentences = transcript.split('. ')
-        sentences = [s.strip() for s in sentences if s.strip()]
-        
-        if len(sentences) <= 2:
-            return transcript
-        
-        # Take first few sentences as summary
-        summary_sentences = sentences[:3]
-        return '. '.join(summary_sentences)
-    
-    def _extract_mock_key_points(self, transcript: str) -> List[str]:
-        """Extract mock key points"""
-        key_points = []
-        sentences = transcript.split('. ')
-        
-        important_keywords = [
-            "important", "key", "main", "primary", "essential", "critical",
-            "remember", "note", "pay attention", "focus on", "highlight"
-        ]
-        
-        for sentence in sentences:
-            sentence = sentence.strip().lower()
-            if any(keyword in sentence for keyword in important_keywords):
-                key_point = sentence.capitalize()
-                if len(key_point) > 10:
-                    key_points.append(key_point)
-        
-        return key_points[:5]  # Limit to top 5 key points
-    
-    def _extract_mock_action_items(self, transcript: str) -> List[str]:
-        """Extract mock action items"""
-        action_items = []
-        sentences = transcript.split('. ')
-        
-        action_verbs = [
-            "should", "must", "need to", "have to", "will", "can",
-            "do", "make", "create", "implement", "complete", "finish"
-        ]
-        
-        for sentence in sentences:
-            sentence = sentence.strip().lower()
-            if any(verb in sentence for verb in action_verbs):
-                action_item = sentence.capitalize()
-                if len(action_item) > 10:
-                    action_items.append(action_item)
-        
-        return action_items[:5]  # Limit to top 5 action items
     
     async def save_notes_to_db(self, notes_data: Dict[str, Any]):
         """Save notes to database"""

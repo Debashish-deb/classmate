@@ -6,6 +6,14 @@ import logging
 from celery import Celery
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import sys
+import pathlib
+
+# Add ai_backend to path
+sys.path.append(str(pathlib.Path(__file__).parent.parent / "ai_backend"))
+
+from services.enhanced_transcription_service import EnhancedTranscriptionService
+from shared_contracts.models import TranscriptionRequest
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,35 +34,31 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False)
 
 class TranscriptionWorker:
     def __init__(self):
-        self.model = None
-        self.device = "cpu"  # Default to CPU for workers
+        self.service = EnhancedTranscriptionService()
         
-    def load_model(self):
-        """Load the Whisper model - simplified version"""
-        try:
-            # For now, we'll use a mock transcription
-            # In production, load actual Whisper model
-            logger.info("Mock transcription model loaded")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            return False
     
     async def transcribe_audio(self, audio_file_path: str, session_id: str, chunk_index: int) -> Dict[str, Any]:
         """Transcribe audio chunk - simplified mock implementation"""
         try:
-            # Mock transcription - in production, use actual Whisper
-            mock_text = f"This is a mock transcription for chunk {chunk_index} of session {session_id}. "
-            mock_text += "The user was discussing important topics that need to be documented."
-            
+            request = TranscriptionRequest(
+                session_id=session_id,
+                chunk_index=chunk_index,
+                audio_file_path=audio_file_path
+            )
+            response = await self.service.transcribe_audio_enhanced(request)
             result = {
-                "id": f"transcript_{session_id}_{chunk_index}",
-                "session_id": session_id,
-                "chunk_index": chunk_index,
-                "text": mock_text,
-                "timestamp": datetime.utcnow().isoformat(),
-                "confidence": 0.95,
-                "speaker": "Speaker 1"
+                "id": response.id,
+                "session_id": response.session_id,
+                "chunk_index": response.chunk_index,
+                "text": response.text,
+                "timestamp": response.timestamp.isoformat(),
+                "confidence": response.confidence,
+                "speaker": response.speaker,
+                "language": response.language,
+                "processing_time": response.processing_time,
+                "segments": [s.model_dump() for s in (response.segments or [])],
+                "corrections": response.corrections,
+                "session_context": response.session_context,
             }
             
             # Save to database
@@ -105,7 +109,6 @@ class TranscriptionWorker:
 def transcribe_audio_task(self, session_id: str, chunk_index: int, audio_file_path: str):
     """Celery task for audio transcription"""
     worker = TranscriptionWorker()
-    worker.load_model()
     
     try:
         loop = asyncio.new_event_loop()
